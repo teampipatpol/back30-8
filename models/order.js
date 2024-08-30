@@ -10,7 +10,13 @@ const orderSchema = new Schema({
   quantity: {
     type: Number,
     required: true
-  }
+  },
+  soldAt: {
+    type: Date,
+    default: Date.now // Set default value to current date and time
+  },
+  status: { type: String, default: 'completed' } // เพิ่มสถานะ
+
 });
 
 module.exports = mongoose.model('Order', orderSchema);
