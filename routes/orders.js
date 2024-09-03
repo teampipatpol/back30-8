@@ -10,6 +10,11 @@ const sendResponse = (res, statusCode, message, data) => {
   });
 };
 
+const formatDate = (isoDate) => {
+  const date = new Date(isoDate);
+  return date.toISOString().slice(0, 19).replace('T', ' '); 
+};
+
 router.get('/', async (req, res) => {
   try {
     const orders = await Order.aggregate([
@@ -26,20 +31,18 @@ router.get('/', async (req, res) => {
       },
       {
         $group: {
-          _id: {
-            time: {
-              $dateToString: { format: "%Y-%m-%d %H:%M:%S", date: "$soldAt" }
-            }
-          },
+          _id: '$billId',
           products: {
             $push: {
+              productId: '$productDetails._id',
+              billId :'$billId',
               name: '$productDetails.name',
               price: '$productDetails.price',
               quantity: '$quantity',
-              totalPrice: { $multiply: ['$quantity', '$productDetails.price'] },
-              image: '$productDetails.image', 
-              
+              status: '$status',
 
+              totalPrice: { $multiply: ['$quantity', '$productDetails.price'] },
+              image: '$productDetails.image',
             }
           },
           totalAmount: { $sum: { $multiply: ['$quantity', '$productDetails.price'] } },
@@ -48,27 +51,15 @@ router.get('/', async (req, res) => {
         }
       },
       {
-        $group: {
-          _id: { $substr: ['$_id.time', 0, 19] }, // Group by date and time up to seconds
-          bills: {
-            $push: {
-              billId: '$_id.time',
-              products: '$products',
-              totalAmount: '$totalAmount',
-              totalQuantity: '$totalQuantity',
-              soldAt: '$_id.time'
-            }
-          },
-          dailyTotal: { $sum: '$totalAmount' },
-          dailyQuantity: { $sum: '$totalQuantity' }
-        }
-      },
-      {
-        $sort: { _id: -1 } // Sort by the most recent dates
+        $sort: { _id: -1 }
       }
     ]);
 
-    sendResponse(res, 200, 'รายการขายในแต่ละวัน', orders);
+    orders.forEach(order => {
+      order._id = formatDate(order._id);
+    });
+
+    sendResponse(res, 200, 'รายการขายตามหมายเลขบิล', orders);
   } catch (error) {
     sendResponse(res, 500, error.message);
   }

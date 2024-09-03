@@ -118,82 +118,114 @@ router.get('/:id/orders', async (req, res) => {
 });
 router.post('/orders/:billId/return', async (req, res) => {
   try {
-    const billId = decodeURIComponent(req.params.billId);
+    const { billId } = req.params;
+    const { returnedItems } = req.body;
 
-    // Assuming `billId` is stored in `Order` documents
-    const orders = await Order.find({ 'bills.billId': billId });
-    if (!orders.length) {
-      return sendResponse(res, 400, 'Order not found', null);
+    if (!billId) {
+      return sendResponse(res, 400, 'Bill ID is required', null);
     }
 
-    const order = orders[0]; // Assuming one order per billId
+    if (!Array.isArray(returnedItems) || returnedItems.length === 0) {
+      return sendResponse(res, 400, 'Returned items are required', null);
+    }
 
-    // Return stock for each item
-    for (const item of order.items) {
+    console.log('Received billId:', billId);
+    console.log('Received returnedItems:', returnedItems); 
+
+    const order = await Order.findOne({ billId });
+    if (!order) {
+      return sendResponse(res, 404, 'Order not found', null);
+    }
+
+    for (const item of returnedItems) {
       const product = await Product.findById(item.productId);
-      if (product) {
-        product.stock += item.quantity;
-        await product.save();
+      if (!product) {
+        return sendResponse(res, 400, `Product with ID ${item.productId} not found`, null);
       }
+
+      console.log(`Processing return for productId: ${item.productId}, quantity: ${item.quantity}`);
+
+      product.stock += item.quantity;
+      await product.save();
     }
 
-    // Mark order as returned
-    order.status = 'returned';
+    order.status = 'returned'; 
     await order.save();
 
-    sendResponse(res, 200, `Returned items for order ${billId}`, null);
+    sendResponse(res, 200, 'Return processed successfully', null);
   } catch (error) {
-    sendResponse(res, 500, error.message);
+    console.error('Error processing return:', error.message);
+    sendResponse(res, 500, error.message, null);
   }
 });
 
+// router.post('/orders/:billId/return', async (req, res) => {
+//   try {
+//     const { billId } = req.params;
+//     const { returnedItems } = req.body;
+
+//     if (!billId) {
+//       return sendResponse(res, 400, 'Bill ID is required', null);
+//     }
+
+//     if (!Array.isArray(returnedItems) || returnedItems.length === 0) {
+//       return sendResponse(res, 400, 'Returned items are required', null);
+//     }
+
+//     // Find the order by billId
+//     const order = await Order.findOne({ billId });
+//     if (!order) {
+//       return sendResponse(res, 404, 'Order not found', null);
+//     }
+
+//     // Iterate over the returned items and update stock
+//     for (const item of returnedItems) {
+//       const product = await Product.findById(item.productId);
+//       if (!product) {
+//         return sendResponse(res, 400, `Product with ID ${item.productId} not found`, null);
+//       }
+
+//       // Increase the stock by the quantity of returned items
+//       product.stock += item.quantity;
+//       await product.save();
+//     }
+
+//     // Optionally, update the order status to "returned" or similar
+//     order.status = 'returned'; // or any other status you use for returned orders
+//     await order.save();
+
+//     sendResponse(res, 200, 'Return processed successfully', null);
+//   } catch (error) {
+//     console.error('Error processing return:', error.message);
+//     sendResponse(res, 500, error.message, null);
+//   }
+// });
+
+
+
 router.get('/orders', async (req, res) => {
   try {
-    const userId = req.user._id; // ต้องมั่นใจว่ามีการตรวจสอบ token ก่อนหน้านี้แล้ว
+    const userId = req.user._id; 
     const userStatus = req.user.status;
 
     let orders;
     if (userStatus === 'Admin') {
-      orders = await Order.find(); // แอดมินดึงข้อมูลทั้งหมด
+      orders = await Order.find(); 
     } else {
-      orders = await Order.find({ userId }); // ผู้ใช้ดึงข้อมูลของตัวเอง
+      orders = await Order.find({ userId }); 
     }
 
     if (!orders.length) return sendResponse(res, 400, 'ยังไม่มีรายการขาย');
 
     sendResponse(res, 200, 'รายการขาย', orders);
   } catch (error) {
+    console.error('Error fetching orders:', error);
     sendResponse(res, 500, error.message);
   }
 });
 
 
-router.post('/orders/:billId/return', async (req, res) => {
-  try {
-    const billId = decodeURIComponent(req.params.billId);
-    
-    const order = await Order.findOne({ _id: billId });
-    
-    if (!order) {
-      return res.status(400).json({ message: 'ไม่พบคำสั่งซื้อที่ระบุ' });
-    }
 
-    for (const item of order.products) {  
-      const product = await Product.findById(item.productId);
-      if (product) {
-        product.stock += item.quantity; 
-        await product.save();
-      }
-    }
-
-    order.status = 'returned';
-    await order.save();
-
-    res.status(200).json({ message: `คืนสินค้าสำหรับคำสั่งซื้อ ${billId} เรียบร้อยแล้ว` });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 router.post('/orders', async (req, res) => {
   try {
     const cartItems = req.body.cart;
@@ -201,6 +233,8 @@ router.post('/orders', async (req, res) => {
     if (!Array.isArray(cartItems) || cartItems.length === 0) {
       return sendResponse(res, 400, 'ตะกร้าว่างหรือข้อมูลไม่ถูกต้อง', null);
     }
+
+    const billId = new Date().toISOString().slice(0, -5) ;
 
     for (const item of cartItems) {
       const product = await Product.findById(item._id);
@@ -213,6 +247,7 @@ router.post('/orders', async (req, res) => {
       }
 
       const order = new Order({
+        billId, 
         productId: item._id,
         quantity: item.quantity,
       });
@@ -230,5 +265,37 @@ router.post('/orders', async (req, res) => {
   }
 });
 
+router.get(':billId/return', (req, res) => {
+  console.log('Request URL:', req.url);
+  console.log('Request Params:', req.params);
+  res.send('Check the console for the request details');
+});
+// router.post(':billId/return', async (req, res) => {
+//   try {
+//     const billId = decodeURIComponent(req.params.billId);
+//     console.log('billId:', billId); // ดูว่าได้ค่าอะไร
+
+//     const order = await Order.findOne({ _id: billId });
+    
+//     if (!order) {
+//       return res.status(400).json({ message: 'ไม่พบคำสั่งซื้อที่ระบุ' });
+//     }
+
+//     for (const item of order.products) {  
+//       const product = await Product.findById(item.productId);
+//       if (product) {
+//         product.stock += item.quantity; 
+//         await product.save();
+//       }
+//     }
+
+//     order.status = 'returned';
+//     await order.save();
+
+//     res.status(200).json({ message: `คืนสินค้าสำหรับคำสั่งซื้อ ${billId} เรียบร้อยแล้ว` });
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
 module.exports = router;

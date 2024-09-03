@@ -2,6 +2,10 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const orderSchema = new Schema({
+  billId: {
+    type: String,
+    required: true
+  },
   productId: {
     type: Schema.Types.ObjectId,
     ref: 'Product',
@@ -13,10 +17,9 @@ const orderSchema = new Schema({
   },
   soldAt: {
     type: Date,
-    default: Date.now // Set default value to current date and time
+    default: Date.now 
   },
-  status: { type: String, default: 'completed' } // เพิ่มสถานะ
-
+  status: { type: String, default: 'completed' }
 });
 
 module.exports = mongoose.model('Order', orderSchema);
