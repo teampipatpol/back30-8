@@ -234,8 +234,10 @@ router.post('/orders', async (req, res) => {
       return sendResponse(res, 400, 'ตะกร้าว่างหรือข้อมูลไม่ถูกต้อง', null);
     }
 
-    const billId = new Date().toISOString().slice(0, -5) ;
-
+    const currentDate = new Date();
+    currentDate.setHours(currentDate.getHours() + 14); // เพิ่มเวลา 7 ชั่วโมงสำหรับเขตเวลาไทย (UTC+7)
+    const billId = currentDate.toISOString().slice(0, -5);
+    
     for (const item of cartItems) {
       const product = await Product.findById(item._id);
       if (!product) {
@@ -297,5 +299,22 @@ router.get(':billId/return', (req, res) => {
 //     res.status(500).json({ message: error.message });
 //   }
 // });
+
+router.post('/types', async (req, res) => {
+  const { type } = req.body;
+
+  // ตรวจสอบว่ามีการส่งประเภทสินค้ามาหรือไม่
+  if (!type) {
+    return sendResponse(res, 400, 'กรุณาระบุชื่อประเภทสินค้า', null);
+  }
+
+  try {
+    const newType = new ProductType({ type });
+    await newType.save(); // บันทึกประเภทสินค้าใหม่ลงในฐานข้อมูล
+    sendResponse(res, 201, 'เพิ่มประเภทสินค้าเรียบร้อยแล้ว', newType);
+  } catch (error) {
+    sendResponse(res, 500, 'เกิดข้อผิดพลาดในการเพิ่มประเภทสินค้า: ' + error.message, null);
+  }
+});
 
 module.exports = router;
